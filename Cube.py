@@ -17,8 +17,9 @@ POSSIBLE_MOVES = ['F', 'R', 'B', 'L', 'U', 'D',
            'F180','R180','B180','L180','U180','D180']
 
 class Cube:
-    def __init__(self, size = 3):
-        self.size = 3
+    def __init__(self, size = 3, h_value = -1):
+        self.h_value = h_value
+        self.size = size
         self.faces = {
             "F": np.full((size, size), 0, dtype=int),
             "R": np.full((size, size), 1, dtype=int),
@@ -37,7 +38,8 @@ class Cube:
         for i in range(self.size):
             output += '       '+ str(self.faces["D"][i]) + '\n'
         return output
-
+    def get_h_value(self):
+        return self.h_value
     def turn_90(self, face):
         side = self.faces[face]
         self.faces[face] = np.rot90(side, 3)
