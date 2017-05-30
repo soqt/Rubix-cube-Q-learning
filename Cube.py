@@ -1,16 +1,15 @@
 import numpy as np
-import colorama
-from colorama import Fore, Back, Style
 import copy
 import random
 
+
 COLOR = {
-        0: "Green",
-        1: "Red",
-        2: "Blue",
-        3: "Orange",
-        4: "White",
-        5: "Yellow"
+        0: "orange",
+        1: "green",
+        2: "red",
+        3: "blue",
+        4: "white",
+        5: "yellow"
 }
 
 POSSIBLE_MOVES = ['F', 'R', 'B', 'L', 'U', 'D',
@@ -28,9 +27,7 @@ class Cube:
             "U": np.full((size, size), 4, dtype=int),
             "D": np.full((size, size), 5, dtype=int),
         }
-
     def __str__(self):
-        colorama.init(autoreset = True)
         output = ""
         for i in range(self.size):
             output += '       '+ str(self.faces["U"][i]) + '\n'
@@ -40,17 +37,6 @@ class Cube:
         for i in range(self.size):
             output += '       '+ str(self.faces["D"][i]) + '\n'
         return output
-
-    def color_chart(self, color):
-        chart = {
-            COLOR[0]: Back.GREEN,
-            COLOR[1]: Back.RED,
-            COLOR[2]: Back.BLUE,
-            COLOR[3]: Back.MAGENTA,
-            COLOR[4]: Back.WHITE,
-            COLOR[5]: Back.YELLOW
-        }
-        return chart[COLOR[color]] + " " + Back.RESET
 
     def turn_90(self, face):
         side = self.faces[face]
@@ -125,7 +111,7 @@ class Cube:
 
         return (left, up, right, bottom)
 
-    def random_cube_generator(self, steps=10):
+    def generate_random_cube(self, steps=10):
         for i in range(steps):
             action = random.choice(POSSIBLE_MOVES)
             if len(action) == 1:
@@ -134,13 +120,46 @@ class Cube:
                 self.turn_90_counter_clockwise(action[0])
             else: self.turn_180(action[0])
 
+    def turn(self, action):
+        if len(action) == 1:
+            self.turn_90(action)
+        elif len(action) == 2:
+            self.turn_90_counter_clockwise(action[0])
+        else:
+            self.turn_180(action[0])
 
-#
-# cb = Cube()
-# # cb.print_cube()
-# cb.turn_90('B')
-# print(cb)
-# cb.turn_90_counter_clockwise('B')
-# cb.random_cube_generator()
-# # cb.print_cube()
-# colorama.deinit()
+    def get_corner_state(self):
+        state = ""
+        state += str(self.faces["U"].item(0)) + str(self.faces["L"].item(0)) + str(self.faces["B"].item(2))
+        state += str(self.faces["F"].item(0)) + str(self.faces["L"].item(2)) + str(self.faces["U"].item(6))
+        state += str(self.faces["F"].item(2)) + str(self.faces["U"].item(8)) + str(self.faces["R"].item(0))
+        state += str(self.faces["F"].item(6)) + str(self.faces["L"].item(8)) + str(self.faces["D"].item(0))
+        state += str(self.faces["D"].item(2)) + str(self.faces["F"].item(8)) + str(self.faces["R"].item(6))
+        state += str(self.faces["L"].item(6)) + str(self.faces["D"].item(6)) + str(self.faces["B"].item(8))
+        state += str(self.faces["R"].item(8)) + str(self.faces["D"].item(8)) + str(self.faces["B"].item(6))
+        state += str(self.faces["U"].item(2)) + str(self.faces["R"].item(2)) + str(self.faces["B"].item(0))
+        return state
+
+    def get_half_edge_state(self):
+        state = ""
+        state += str(self.faces["F"].item(1)) + str(self.faces["U"].item(7)) + \
+                 str(self.faces["F"].item(3)) + str(self.faces["L"].item(5)) + \
+                 str(self.faces["F"].item(7)) + str(self.faces["D"].item(1)) + \
+                 str(self.faces["F"].item(5)) + str(self.faces["R"].item(3)) + \
+                 str(self.faces["L"].item(1)) + str(self.faces["U"].item(3)) + \
+                 str(self.faces["U"].item(5)) + str(self.faces["R"].item(1))
+
+        return state
+    def get_other_half_edge_state(self):
+        state = ""
+        state += str(self.faces["B"].item(1)) + str(self.faces["U"].item(1)) + \
+                 str(self.faces["B"].item(3)) + str(self.faces["R"].item(5)) + \
+                 str(self.faces["B"].item(7)) + str(self.faces["D"].item(7)) + \
+                 str(self.faces["B"].item(5)) + str(self.faces["L"].item(3)) + \
+                 str(self.faces["D"].item(3)) + str(self.faces["L"].item(7)) + \
+                 str(self.faces["D"].item(5)) + str(self.faces["R"].item(7))
+        return state
+
+
+# cube = Cube()
+# hi = cube.get_corner_state()
