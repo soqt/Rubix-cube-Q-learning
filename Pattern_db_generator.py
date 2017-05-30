@@ -36,10 +36,6 @@ def IterativeBFS(initial_state):
                 new_state.get_half_edge_state() not in HALF_EDGES and \
                 new_state.get_other_half_edge_state() not in OTHER_HALP_EDGES:
                     L.append(new_state)
-            # corner_cubies = [new_state.faces[""]]
-            # if not (new_state in OPEN) and not (new_state in CLOSED):
-            #     L.append(new_state)
-            #     pdb[new_state] = step
         OPEN = OPEN + L
 
         corners = S.get_corner_state()
