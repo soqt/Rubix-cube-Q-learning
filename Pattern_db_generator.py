@@ -51,7 +51,7 @@ def IterativeBFS(initial_state):
         other_half_edges = S.get_other_half_edge_state()
         if other_half_edges not in OTHER_HALP_EDGES:
             OTHER_HALP_EDGES[other_half_edges] = depth
-
+        print(depth)
 
 
 def save_obj(obj, name):
