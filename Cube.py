@@ -1,5 +1,4 @@
 import numpy as np
-import copy
 import random
 
 
@@ -12,12 +11,84 @@ COLOR = {
         5: "yellow"
 }
 
+# 'X' turns face X 90 degrees clockwise (looking straight at that face), 'X2' turns it
+# 90 degrees counter-clockwise and 'X180' turns it 180 degrees.
 POSSIBLE_MOVES = ['F', 'R', 'B', 'L', 'U', 'D',
            'F2', 'R2', 'B2', 'L2', 'U2', 'D2',
            'F180','R180','B180','L180','U180','D180']
+MOVE_INDEX = {move: i for i, move in enumerate(POSSIBLE_MOVES)}
+
+# Order of the faces in Cube.to_array(). Face i starts out (and its centre always stays) color i.
+FACES = ['F', 'R', 'B', 'L', 'U', 'D']
+SOLVED_STATE = np.repeat(np.arange(6, dtype=np.uint8), 9)
+
+
+def _sticker(face, row, col):
+    '''3D cubie position and outward normal of a sticker (x right, y up, z towards the viewer).
+    Every face is stored as seen from outside, laid out like the usual net: U above F, D below F
+    and L F R B from left to right.'''
+    a, b = col - 1, 1 - row
+    return {
+        'F': ((a, b, 1), (0, 0, 1)),
+        'B': ((-a, b, -1), (0, 0, -1)),
+        'R': ((1, b, -a), (1, 0, 0)),
+        'L': ((-1, b, a), (-1, 0, 0)),
+        'U': ((a, 1, -b), (0, 1, 0)),
+        'D': ((a, -1, b), (0, -1, 0)),
+    }[face]
+
+
+def _build_move_perms():
+    '''MOVE_PERMS[m] is a permutation of the 54 stickers: after move m, state[i] = old_state[perm[i]].'''
+    stickers = [_sticker(face, r, c) for face in FACES for r in range(3) for c in range(3)]
+    index = {s: i for i, s in enumerate(stickers)}
+
+    def rotate_clockwise(v, axis):
+        # -90 degrees about the outward normal is clockwise when looking at the face
+        return tuple(int(x) for x in np.dot(axis, v) * axis - np.cross(axis, v))
+
+    clockwise = {}
+    for f, face in enumerate(FACES):
+        axis = np.array(stickers[9 * f + 4][1])
+        perm = np.arange(54)
+        for i, (pos, normal) in enumerate(stickers):
+            if np.dot(pos, axis) == 1:
+                perm[index[(rotate_clockwise(pos, axis), rotate_clockwise(normal, axis))]] = i
+        clockwise[face] = perm
+
+    perms = []
+    for move in POSSIBLE_MOVES:
+        quarter_turns = {1: 1, 2: 3, 4: 2}[len(move)]
+        perm = np.arange(54)
+        for _ in range(quarter_turns):
+            perm = perm[clockwise[move[0]]]
+        perms.append(perm)
+    return np.stack(perms)
+
+
+MOVE_PERMS = _build_move_perms()
+
+
+def _sticker_indices(*stickers):
+    return np.array([9 * FACES.index(face) + item for face, item in stickers])
+
+
+CORNER_STICKERS = _sticker_indices(
+    ('U', 0), ('L', 0), ('B', 2), ('F', 0), ('L', 2), ('U', 6), ('F', 2), ('U', 8),
+    ('R', 0), ('F', 6), ('L', 8), ('D', 0), ('D', 2), ('F', 8), ('R', 6), ('L', 6),
+    ('D', 6), ('B', 8), ('R', 8), ('D', 8), ('B', 6), ('U', 2), ('R', 2), ('B', 0))
+HALF_EDGE_STICKERS = _sticker_indices(
+    ('F', 1), ('U', 7), ('F', 3), ('L', 5), ('F', 7), ('D', 1),
+    ('F', 5), ('R', 3), ('L', 1), ('U', 3), ('U', 5), ('R', 1))
+OTHER_HALF_EDGE_STICKERS = _sticker_indices(
+    ('B', 1), ('U', 1), ('B', 3), ('R', 5), ('B', 7), ('D', 7),
+    ('B', 5), ('L', 3), ('D', 3), ('L', 7), ('D', 5), ('R', 7))
+
 
 class Cube:
     def __init__(self, size = 3, h_value = -1):
+        if size != 3:
+            raise ValueError("only the 3x3x3 cube is supported")
         self.h_value = h_value
         self.size = size
         self.faces = {
@@ -38,130 +109,53 @@ class Cube:
         for i in range(self.size):
             output += '       '+ str(self.faces["D"][i]) + '\n'
         return output
+    def __eq__(self, other):
+        return isinstance(other, Cube) and np.array_equal(self.to_array(), other.to_array())
+    def __hash__(self):
+        return hash(self.to_array().tobytes())
     def get_h_value(self):
         return self.h_value
+
+    def to_array(self):
+        '''The 54 sticker colors as a uint8 array: faces in FACES order, each row by row.'''
+        return np.concatenate([self.faces[face].ravel() for face in FACES]).astype(np.uint8)
+
+    @classmethod
+    def from_array(cls, state):
+        cube = cls()
+        for i, face in enumerate(FACES):
+            cube.faces[face] = np.asarray(state[9 * i: 9 * i + 9], dtype=int).reshape(3, 3)
+        return cube
+
+    def is_solved(self):
+        return np.array_equal(self.to_array(), SOLVED_STATE)
+
     def turn_90(self, face):
-        side = self.faces[face]
-        self.faces[face] = np.rot90(side, 3)
-        attaches = self.get_neighbors(face)
-        temp = copy.deepcopy(attaches[0])
-        self.update_row(attaches[3], attaches[0])
-        self.update_row(attaches[2], attaches[3])
-        self.update_row(attaches[1], attaches[2])
-        self.update_row(temp, attaches[1])
+        self.turn(face)
 
     def turn_90_counter_clockwise(self, face):
-        side = self.faces[face]
-        self.faces[face] = np.rot90(side, 1)
-        neighbors = self.get_neighbors(face)
-        temp = copy.deepcopy(neighbors[3])
-        self.update_row(neighbors[0], neighbors[3])
-        self.update_row(neighbors[1], neighbors[0])
-        self.update_row(neighbors[2], neighbors[1])
-        self.update_row(temp, neighbors[2])
+        self.turn(face + '2')
 
     def turn_180(self, face):
-        side = self.faces[face]
-        self.faces[face] = np.rot90(side, 1)
-        neighbors = self.get_neighbors(face)
-        temp = copy.deepcopy(neighbors[2])
-        self.update_row(neighbors[0], neighbors[2])
-        self.update_row(temp, neighbors[0])
-        temp = copy.deepcopy(neighbors[3])
-        self.update_row(neighbors[1], neighbors[3])
-        self.update_row(temp, neighbors[1])
-
-    def update_row(self, src, to):
-        for i in range(3):
-            to[i] = src[i]
-
-    def get_neighbors(self, side):
-        up = []
-        left = []
-        bottom = []
-        right = []
-        if side == 'F':
-            left = self.faces['L'][:, self.size - 1]
-            up = self.faces['U'][self.size-1]
-            bottom = self.faces['D'][0]
-            right = self.faces['R'][:, 0]
-        elif side == 'L':
-            left = self.faces['B'][:, self.size - 1]
-            up = self.faces['U'][:, 0]
-            bottom = self.faces['D'][:, 0]
-            right = self.faces['F'][:, 0]
-        elif side == 'B':
-            left = self.faces['R'][:, self.size - 1]
-            up = self.faces['U'][0]
-            bottom = self.faces['D'][self.size -1]
-            right = self.faces['L'][:, 0]
-        elif side == 'R':
-            left = self.faces['F'][:, self.size - 1]
-            up = self.faces['U'][:, self.size - 1]
-            bottom = self.faces['D'][:, self.size-1]
-            right = self.faces['B'][:, 0]
-        elif side == 'U':
-            left = self.faces['L'][0]
-            up = self.faces['B'][0]
-            bottom = self.faces['F'][0]
-            right = self.faces['R'][0]
-        elif side == 'D':
-            left = self.faces['L'][self.size - 1]
-            up = self.faces['F'][self.size - 1]
-            bottom = self.faces['B'][self.size - 1]
-            right = self.faces['R'][self.size - 1]
-
-        return (left, up, right, bottom)
+        self.turn(face + '180')
 
     def generate_random_cube(self, steps=10):
-        for i in range(steps):
-            action = random.choice(POSSIBLE_MOVES)
-            if len(action) == 1:
-                self.turn_90(action)
-            elif len(action) == 2:
-                self.turn_90_counter_clockwise(action[0])
-            else: self.turn_180(action[0])
+        '''Scramble with `steps` random moves and return them.'''
+        moves = [random.choice(POSSIBLE_MOVES) for _ in range(steps)]
+        for action in moves:
+            self.turn(action)
+        return moves
 
     def turn(self, action):
-        if len(action) == 1:
-            self.turn_90(action)
-        elif len(action) == 2:
-            self.turn_90_counter_clockwise(action[0])
-        else:
-            self.turn_180(action[0])
+        state = self.to_array()[MOVE_PERMS[MOVE_INDEX[action]]]
+        for i, face in enumerate(FACES):
+            self.faces[face] = state[9 * i: 9 * i + 9].astype(int).reshape(3, 3)
 
     def get_corner_state(self):
-        state = ""
-        state += str(self.faces["U"].item(0)) + str(self.faces["L"].item(0)) + str(self.faces["B"].item(2))
-        state += str(self.faces["F"].item(0)) + str(self.faces["L"].item(2)) + str(self.faces["U"].item(6))
-        state += str(self.faces["F"].item(2)) + str(self.faces["U"].item(8)) + str(self.faces["R"].item(0))
-        state += str(self.faces["F"].item(6)) + str(self.faces["L"].item(8)) + str(self.faces["D"].item(0))
-        state += str(self.faces["D"].item(2)) + str(self.faces["F"].item(8)) + str(self.faces["R"].item(6))
-        state += str(self.faces["L"].item(6)) + str(self.faces["D"].item(6)) + str(self.faces["B"].item(8))
-        state += str(self.faces["R"].item(8)) + str(self.faces["D"].item(8)) + str(self.faces["B"].item(6))
-        state += str(self.faces["U"].item(2)) + str(self.faces["R"].item(2)) + str(self.faces["B"].item(0))
-        return state
+        return ''.join(str(c) for c in self.to_array()[CORNER_STICKERS])
 
     def get_half_edge_state(self):
-        state = ""
-        state += str(self.faces["F"].item(1)) + str(self.faces["U"].item(7)) + \
-                 str(self.faces["F"].item(3)) + str(self.faces["L"].item(5)) + \
-                 str(self.faces["F"].item(7)) + str(self.faces["D"].item(1)) + \
-                 str(self.faces["F"].item(5)) + str(self.faces["R"].item(3)) + \
-                 str(self.faces["L"].item(1)) + str(self.faces["U"].item(3)) + \
-                 str(self.faces["U"].item(5)) + str(self.faces["R"].item(1))
+        return ''.join(str(c) for c in self.to_array()[HALF_EDGE_STICKERS])
 
-        return state
     def get_other_half_edge_state(self):
-        state = ""
-        state += str(self.faces["B"].item(1)) + str(self.faces["U"].item(1)) + \
-                 str(self.faces["B"].item(3)) + str(self.faces["R"].item(5)) + \
-                 str(self.faces["B"].item(7)) + str(self.faces["D"].item(7)) + \
-                 str(self.faces["B"].item(5)) + str(self.faces["L"].item(3)) + \
-                 str(self.faces["D"].item(3)) + str(self.faces["L"].item(7)) + \
-                 str(self.faces["D"].item(5)) + str(self.faces["R"].item(7))
-        return state
-
-
-# cube = Cube()
-# hi = cube.get_corner_state()
+        return ''.join(str(c) for c in self.to_array()[OTHER_HALF_EDGE_STICKERS])

@@ -1,7 +1,9 @@
+import argparse
+import random
+import time
 from tkinter import *
 import Cube
-# import RubixCube
-# import MDP
+import RubixCube
 
 opt_policy = None
 
@@ -11,6 +13,12 @@ COLOR = Cube.COLOR
 ACTIONS = Cube.POSSIBLE_MOVES
 
 heuristics = lambda s: RubixCube.HEURISTICS['h_manhattan'](s)
+
+parser = argparse.ArgumentParser(description='Show the cube, optionally scramble it and solve it with a trained Q-network.')
+parser.add_argument('--scramble', type=int, default=0, help='number of random moves to scramble with')
+parser.add_argument('--checkpoint', help='Q-network from TrainQ.py to solve the scrambled cube with')
+parser.add_argument('--delay', type=float, default=0.3, help='seconds between animated moves')
+args = parser.parse_args()
 
 cube_size = 3
 Width = 700
@@ -81,21 +89,33 @@ def update_cube(cube):
             count += 1
 
 
+def animate(cube, moves):
+    for move in moves:
+        time.sleep(args.delay)
+        cube.turn(move)
+        update_cube(cube)
+        master.update()
+
+
 def run():
     global opt_policy
     cube = Cube.Cube()
-    # cube.generate_random_cube()
-    # rubix_cube_MDP = MDP.MDP()
-    # rubix_cube_MDP.register_start_state(cube)
-    # rubix_cube_MDP.register_actions(ACTIONS)
 
     if GUI:
         create_cube(cube)
-        for i in range(0):
-            cube.generate_random_cube(1)
-            update_cube(cube)
-            master.update()
-            # cube_GUI(cube)
+        master.update()
+        animate(cube, random.choices(ACTIONS, k=args.scramble))
+        print('scrambled, misplaced stickers:', heuristics(cube))
+        if args.checkpoint:
+            import DeepQ
+            import Solver
+            opt_policy = Solver.QFunction(DeepQ.load_model(args.checkpoint, DeepQ.select_device()))
+            moves, nodes = Solver.q_star_search(opt_policy, cube.to_array())
+            if moves is None:
+                print('no solution found (%d nodes)' % nodes)
+            else:
+                print('solution (%d moves): %s' % (len(moves), Solver.standard_notation(moves)))
+                animate(cube, moves)
         print('done')
         master.mainloop()
     else:

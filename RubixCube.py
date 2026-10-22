@@ -1,9 +1,7 @@
 import Cube
 import copy
 
-ACTIONS = ['F', 'R', 'B', 'L', 'U', 'D',
-           'F2', 'R2', 'B2', 'L2', 'U2', 'D2',
-           'F180','R180','B180','L180','U180','D180']
+ACTIONS = Cube.POSSIBLE_MOVES
 
 
 cube = Cube.Cube()
@@ -23,103 +21,41 @@ class Operator:
         return self.state_transf(s)
 
 
-F = Operator("Move F side 90 degree clockwise if possible", lambda s: can_move(s, "F"), lambda s: move(s, 'F'))
-R = Operator("Move F side 90 degree clockwise if possible",\
-             lambda s: can_move(s, "R"),\
-             lambda s: move(s, 'R'))
-B = Operator("Move F side 90 degree clockwise if possible",\
-             lambda s: can_move(s, "B"),\
-             lambda s: move(s, 'B'))
-L = Operator("Move F side 90 degree clockwise if possible",\
-             lambda s: can_move(s, "L"),\
-             lambda s: move(s, 'L'))
-U = Operator("Move F side 90 degree clockwise if possible",\
-             lambda s: can_move(s, "U"),\
-             lambda s: move(s, 'U'))
-D = Operator("Move F side 90 degree clockwise if possible",\
-             lambda s: can_move(s, "D"),\
-             lambda s: move(s, 'D'))
-F2 = Operator("Move F side 90 degree clockwise if possible",\
-             lambda s: can_move(s, "F"),\
-             lambda s: move(s, 'F'))
-R2 = Operator("Move F side 90 degree clockwise if possible",\
-             lambda s: can_move(s, "R2"),\
-             lambda s: move(s, 'R'))
-B2 = Operator("Move F side 90 degree clockwise if possible",\
-             lambda s: can_move(s, "B2"),\
-             lambda s: move(s, 'B2'))
-L2 = Operator("Move F side 90 degree clockwise if possible",\
-             lambda s: can_move(s, "L2"),\
-             lambda s: move(s, 'L2'))
-U2 = Operator("Move F side 90 degree clockwise if possible",\
-             lambda s: can_move(s, "U2"),\
-             lambda s: move(s, 'U2'))
-D2 = Operator("Move F side 90 degree clockwise if possible",\
-             lambda s: can_move(s, "D2"),\
-             lambda s: move(s, 'D2'))
-F180 = Operator("Move F side 90 degree clockwise if possible",\
-             lambda s: can_move(s, "F180"),\
-             lambda s: move(s, 'F180'))
-R180 = Operator("Move F side 90 degree clockwise if possible",\
-             lambda s: can_move(s, "R180"),\
-             lambda s: move(s, 'R180'))
-B180 = Operator("Move F side 90 degree clockwise if possible",\
-             lambda s: can_move(s, "B180"),\
-             lambda s: move(s, 'B180'))
-L180 = Operator("Move F side 90 degree clockwise if possible",\
-             lambda s: can_move(s, "L180"),\
-             lambda s: move(s, 'L180'))
-U180 = Operator("Move F side 90 degree clockwise if possible",\
-             lambda s: can_move(s, "U180"),\
-             lambda s: move(s, 'U180'))
-D180 = Operator("Move F side 90 degree clockwise if possible",\
-             lambda s: can_move(s, "D180"),\
-             lambda s: move(s, 'D180'))
+def describe(action):
+    turn = {1: "90 degrees clockwise", 2: "90 degrees counter-clockwise", 4: "180 degrees"}[len(action)]
+    return "Move " + action[0] + " side " + turn
 
-OPERATORS = [F, R, B, L, U, D, F2, R2, B2, L2, U2, D2, F180, R180, B180, L180, U180, D180]
+
+OPERATORS = [Operator(describe(action),
+                      lambda s, action=action: can_move(s, action),
+                      lambda s, action=action: move(s, action))
+             for action in ACTIONS]
 
 def can_move(s, action):
-    # if S is done. S.F, B, L U D is same color
-    # if h_manhattan(s) == 0: return False
-    return True
+    # the solved cube is terminal
+    return h_manhattan(s) != 0
 
 def move(s, action):
     state = copy.deepcopy(s)
     state.turn(action)
     return state
 
-P_normal = 0.8
-P_noise = 0.1
 def T(s, a, sp):
-    if h_manhattan(s) == 0: return 0
-    return P_normal
+    '''Turning a face is deterministic.'''
+    return 1.0 if move(s, a) == sp else 0.0
 
 
 
 def R_func(s, a, sp):
-    '''Return the reward associated with transitioning from s to sp via action a.'''
-    value = h_manhattan(s)
-    arrived_value = h_manhattan(sp)
-    if value == 9 or value == 0 or arrived_value == 9:
-        return 100.0
-    if value <= 18 or arrived_value <= 18:
-        return 50.0
-    if value <= 27 or arrived_value <= 27:
-        return 30.0
-    if arrived_value > value:
-        return -20.0
-    return -5.0
+    '''Return the reward associated with transitioning from s to sp via action a.
+    Every move costs 1 and the solved cube is terminal, so the best policy solves the cube in as
+    few moves as possible. DeepQ.py learns the same values as costs: Q_cost(s, a) = -Q_reward(s, a).'''
+    return -1.0
 
 
 
 def h_manhattan(state):
-    sum = 0
-    face_count = 0
-    for face in state.faces:
-        for block in face:
-            if block != face_count:
-                sum += 1
-        face_count += 1
-    return sum
+    '''Number of stickers that don't match the centre of their face (0 when solved).'''
+    return int(sum((face != face[1, 1]).sum() for face in state.faces.values()))
 
 HEURISTICS = {'h_manhattan' : h_manhattan}

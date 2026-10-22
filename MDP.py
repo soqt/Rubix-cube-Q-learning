@@ -16,6 +16,9 @@ class MDP:
     def register_reward_functions(self, reward_func):
         self.R = reward_func
     def state_neighbors(self, state):
-        neighbors = self.succ.get(state, False)
-        if neighbors == False
-            neighbors = [op.apply(state) for op in self.ops if op.is_applicable(state)]
+        neighbors = self.succ.get(state)
+        if neighbors is None:
+            neighbors = [op.apply(state) for op in self.operators if op.is_applicable(state)]
+            self.succ[state] = neighbors
+            self.know_states.update(neighbors)
+        return neighbors
